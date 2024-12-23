@@ -19,5 +19,6 @@ jobs:
         uses: ./tca
         with:
           tisToken: ${{ secrets.TIS_PASS }}
-          meshConfigFile: ./tca/test/mesh-config.yaml
+          meshConfigFile: ./tca/test/manifest.yaml
           localOnly: true
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
