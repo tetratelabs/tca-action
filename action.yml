@@ -17,6 +17,10 @@ inputs:
     description: "Path to the kubeconfig file"
     required: false
     default: ""
+  tcaVersion:
+    description: "TCA version"
+    required: false
+    default: "latest"
 runs:
   using: "composite"
   steps:
@@ -28,6 +32,8 @@ runs:
 
     - name: Get TCA binary
       id: get-tca
+      env:
+        TCA_VERSION: ${{ inputs.tcaVersion }}
       run: get-tca.sh
       shell: bash
 
