@@ -1,0 +1,23 @@
+name: Build and Test
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
+    branches:
+      - "main"
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: tca
+          clean: true
+
+      - name: NoOps
+        uses: ./tca
+        with:
+          tisToken: ${{ secrets.TIS_PASS }}
+          meshConfigFile: ./tca/test/mesh-config.yaml
+          localOnly: true

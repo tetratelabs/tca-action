@@ -1,0 +1,43 @@
+# https://help.github.com/en/articles/metadata-syntax-for-github-actions
+name: "TCA Action"
+description: "GitHub Action for running TCA on Linux, Windows, and macOS virtual environments"
+inputs:
+  tisToken:
+    description: "TIS password"
+    required: true
+  localOnly:
+    description: "Run TCA locally"
+    required: false
+    default: "false"
+  meshConfigFile:
+    description: "Path to the mesh configuration file"
+    required: false
+    default: ""
+  kubeConfig:
+    description: "Path to the kubeconfig file"
+    required: false
+    default: ""
+runs:
+  using: "composite"
+  steps:
+    - name: Get TCA binary
+      id: get-tca
+      run: get-tca.sh
+      shell: bash
+
+    - name: Run TCA analyzer
+      env:
+        TIS_PASS: ${{ inputs.tisToken }}
+      run: |
+        ARGS = ""
+        if [[ "${{ inputs.localOnly }}" == "true" ]]; then
+          ARGS = "--local-only"
+        fi
+        if [[ -n "${{ inputs.meshConfigFile }}" ]]; then
+          ARGS = "${ARGS} -f ${{ inputs.meshConfigFile }}"
+        fi
+        if [[ -n "${{ inputs.kubeConfig }}" ]]; then
+          ARGS = "${ARGS} -c ${{ inputs.kubeConfig }}"
+        fi
+        tca analyze $ARGS
+
