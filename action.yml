@@ -21,6 +21,10 @@ inputs:
     description: "TCA version"
     required: false
     default: "latest"
+  githubToken: 
+    description: "GitHub token"
+    required: false
+    default: ""
 runs:
   using: "composite"
   steps:
@@ -33,7 +37,9 @@ runs:
     - name: Get TCA binary
       id: get-tca
       env:
+        TIS_PASS: ${{ inputs.tisToken }}
         TCA_VERSION: ${{ inputs.tcaVersion }}
+        GIGITHUB_OAUTH_TOKEN: ${{ inputs.githubToken }}
       run: get-tca.sh
       shell: bash
 
@@ -42,14 +48,14 @@ runs:
       env:
         TIS_PASS: ${{ inputs.tisToken }}
       run: |
-        ARGS = ""
+        ARGS=""
         if [[ "${{ inputs.localOnly }}" == "true" ]]; then
-          ARGS = "--local-only"
+          ARGS="--local-only"
         fi
         if [[ -n "${{ inputs.meshConfigFile }}" ]]; then
-          ARGS = "${ARGS} -f ${{ inputs.meshConfigFile }}"
+          ARGS="${ARGS} -f ${{ inputs.meshConfigFile }}"
         fi
         if [[ -n "${{ inputs.kubeConfig }}" ]]; then
-          ARGS = "${ARGS} -c ${{ inputs.kubeConfig }}"
+          ARGS="${ARGS} -c ${{ inputs.kubeConfig }}"
         fi
         tca analyze $ARGS
