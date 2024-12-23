@@ -6,6 +6,7 @@
 # make it executable
 # remove the tar file
 
+set -e
 
 TCA_VERSION=${TCA_VERSION:-latest}
 # Determines the operating system.
