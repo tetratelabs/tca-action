@@ -26,6 +26,7 @@ runs:
       shell: bash
 
     - name: Run TCA analyzer
+      shell: bash
       env:
         TIS_PASS: ${{ inputs.tisToken }}
       run: |
