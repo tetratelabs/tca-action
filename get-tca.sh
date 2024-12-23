@@ -47,7 +47,7 @@ NAME="tca-auth_${TCA_VERSION}_${OSEXT}_${TCA_ARCH}.tar.gz"
 URL="https://github.com/tetratelabs/tca-action/releases/download/${TCA_VERSION}/${NAME}"
 echo "Downloading ${URL}"
 
-# curl -fsLO "${URL}"
+curl -fsLO "${URL}"
 tar -xzf "${NAME}"
 rm -f "${NAME}"
 chmod +x tca-auth
