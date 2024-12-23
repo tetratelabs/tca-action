@@ -22,7 +22,7 @@ runs:
   steps:
     - name: Get TCA binary
       id: get-tca
-      run: get-tca.sh
+      run: ./get-tca.sh
       shell: bash
 
     - name: Run TCA analyzer

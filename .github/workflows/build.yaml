@@ -15,7 +15,7 @@ jobs:
           path: tca
           clean: true
 
-      - name: NoOps
+      - name: test action
         uses: ./tca
         with:
           tisToken: ${{ secrets.TIS_PASS }}
