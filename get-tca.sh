@@ -49,7 +49,7 @@ chmod +x fetch_${OSEXT}_${TCA_ARCH}
 mv fetch_${OSEXT}_${TCA_ARCH} /usr/local/bin/fetch
 
 NAME="tca-auth_${TCA_VERSION}_${OSEXT}_${TCA_ARCH}.tar.gz"
-fetch --repo="https://github.com/tetratelabs/tca-action" -github-oauth-token="${GIGITHUB_OAUTH_TOKEN}" --tag="${TCA_VERSION}" --release-asset="${NAME}" ./
+fetch --repo="https://github.com/tetratelabs/tca-action" -github-oauth-token="${GIGITHUB_OAUTH_TOKEN}" --tag="tca-auth-${TCA_VERSION}" --release-asset="${NAME}" ./
 tar -xzf "${NAME}"
 rm -f "${NAME}"
 chmod +x tca-auth
