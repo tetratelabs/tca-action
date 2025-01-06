@@ -1,11 +1,5 @@
 #!/usr/bin/env bash
 
-# download the TCA file from github relase page, e.g. https://github.com/tetratelabs/tca-action/releases/download/latest/tca-auth_latest_linux_amd64.tar.gz
-# extract the tar file
-# copy the tca-auth binary to /usr/local/bin
-# make it executable
-# remove the tar file
-
 set -e
 
 TCA_VERSION=${TCA_VERSION:-latest}
@@ -48,12 +42,19 @@ curl -LJO https://github.com/gruntwork-io/fetch/releases/download/v0.4.6/fetch_$
 chmod +x fetch_${OSEXT}_${TCA_ARCH}
 mv fetch_${OSEXT}_${TCA_ARCH} /usr/local/bin/fetch
 
+# download the TCA file from github relase page using fetch
 NAME="tca-auth_${TCA_VERSION}_${OSEXT}_${TCA_ARCH}.tar.gz"
-fetch --repo="https://github.com/tetratelabs/tca-action" -github-oauth-token="${GIGITHUB_OAUTH_TOKEN}" --tag="${TCA_VERSION}" --release-asset="${NAME}" ./
+fetch --repo="https://github.com/tetratelabs/tca-action" -github-oauth-token="${GITHUB_ACCESS_TOKEN}" --tag="${TCA_VERSION}" --release-asset="${NAME}" ./
+
+# extract the tar file then remove it
 tar -xzf "${NAME}"
 rm -f "${NAME}"
+
+# make tca executable and copy the tca-auth binary to /usr/local/bin
 chmod +x tca-auth
 mv tca-auth /usr/local/bin/tca
+
+# check if tca is installed successfully
 tca analyze -h
 
 echo "Downloading ${NAME} completed"
