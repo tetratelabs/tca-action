@@ -44,7 +44,7 @@ mv fetch_${OSEXT}_${TCA_ARCH} /usr/local/bin/fetch
 
 # download the TCA file from github relase page using fetch
 NAME="tca-auth_${TCA_VERSION}_${OSEXT}_${TCA_ARCH}.tar.gz"
-fetch --repo="https://github.com/tetratelabs/tca-action" -github-oauth-token="${GITHUB_ACCESS_TOKEN}" --tag="${TCA_VERSION}" --release-asset="${NAME}" ./
+fetch --repo="https://github.com/tetratelabs/tca-action" -github-oauth-token="${GITHUB_ACCESS_TOKEN}" --tag="tca-auth-${TCA_VERSION}" --release-asset="${NAME}" ./
 
 # extract the tar file then remove it
 tar -xzf "${NAME}"
