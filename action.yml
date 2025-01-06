@@ -1,28 +1,28 @@
-# https://help.github.com/en/articles/metadata-syntax-for-github-actions
-name: "TCA Action"
-description: "GitHub Action for running TCA on Linux, Windows, and macOS virtual environments"
+name: "Tetrate Config Analyzer"
+description: "Validate and analyze Istio service mesh configurations for security, compliance, and best practices"
+author: "Tetrate"
 inputs:
-  tisToken:
-    description: "TIS password"
+  tis-password:
+    description: "Tetrate Istio Subscription (TIS) password required for authentication. Store this as a secret"
     required: true
-  localOnly:
-    description: "Run TCA locally"
+  local-only:
+    description: "Analyze configuration files locally without connecting to a Kubernetes cluster"
     required: false
-    default: "false"
-  meshConfigFile:
-    description: "Path to the mesh configuration file"
-    required: false
-    default: ""
-  kubeConfig:
-    description: "Path to the kubeconfig file"
+    default: "true"
+  mesh-config:
+    description: "Path to the Istio configuration file (required when using local-only mode)"
     required: false
     default: ""
-  tcaVersion:
-    description: "TCA version"
+  kube-config:
+    description: "Path to the Kubernetes config file for cluster analysis. Not used in local-only mode"
+    required: false
+    default: ""
+  version:
+    description: "TCA version to use (e.g. 'v1.1.0'). Default is 'latest'"
     required: false
     default: "latest"
-  githubToken: 
-    description: "GitHub token"
+  github-token:
+    description: "GitHub token for downloading TCA binary"
     required: false
     default: ""
 runs:
@@ -37,25 +37,25 @@ runs:
     - name: Get TCA binary
       id: get-tca
       env:
-        TIS_PASS: ${{ inputs.tisToken }}
-        TCA_VERSION: ${{ inputs.tcaVersion }}
-        GIGITHUB_OAUTH_TOKEN: ${{ inputs.githubToken }}
+        TIS_PASS: ${{ inputs.tis-password }}
+        TCA_VERSION: ${{ inputs.version }}
+        GITHUB_ACCESS_TOKEN: ${{ inputs.github-token }}
       run: get-tca.sh
       shell: bash
 
     - name: Run TCA analyzer
       shell: bash
       env:
-        TIS_PASS: ${{ inputs.tisToken }}
+        TIS_PASS: ${{ inputs.tis-password }}
       run: |
         ARGS=""
-        if [[ "${{ inputs.localOnly }}" == "true" ]]; then
+        if [[ "${{ inputs.local-only }}" == "true" ]]; then
           ARGS="--local-only"
         fi
-        if [[ -n "${{ inputs.meshConfigFile }}" ]]; then
-          ARGS="${ARGS} -f ${{ inputs.meshConfigFile }}"
+        if [[ -n "${{ inputs.mesh-config }}" ]]; then
+          ARGS="${ARGS} -f ${{ inputs.mesh-config }}"
         fi
-        if [[ -n "${{ inputs.kubeConfig }}" ]]; then
-          ARGS="${ARGS} -c ${{ inputs.kubeConfig }}"
+        if [[ -n "${{ inputs.kube-config }}" ]]; then
+          ARGS="${ARGS} -c ${{ inputs.kube-config }}"
         fi
         tca analyze $ARGS

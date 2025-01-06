@@ -18,7 +18,6 @@ jobs:
       - name: test action
         uses: ./tca
         with:
-          tisToken: ${{ secrets.TIS_PASS }}
-          meshConfigFile: ./tca/test/manifest.yaml
-          localOnly: true
-          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          tis-password: ${{ secrets.TIS_PASS }}
+          mesh-config: ./tca/test/manifest.yaml
+          github-token: ${{ secrets.GITHUB_TOKEN }}
