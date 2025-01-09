@@ -15,9 +15,16 @@ jobs:
           path: tca
           clean: true
 
-      - name: test action
+      - name: success
         uses: ./tca
         with:
           tis-password: ${{ secrets.TIS_PASS }}
           mesh-config: ./tca/test/manifest.yaml
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: failure
+        uses: ./tca
+        with:
+          tis-password: ${{ secrets.TIS_PASS }}
+          mesh-config: ./tca/test/failed.yaml
           github-token: ${{ secrets.GITHUB_TOKEN }}
