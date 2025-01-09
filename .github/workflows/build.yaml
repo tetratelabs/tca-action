@@ -24,6 +24,7 @@ jobs:
 
       - name: failure
         uses: ./tca
+        continue-on-error: true # Continue even if the job fails
         with:
           tis-password: ${{ secrets.TIS_PASS }}
           mesh-config: ./tca/test/failed.yaml
