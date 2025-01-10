@@ -53,17 +53,6 @@ runs:
       run: get-tca.sh
       shell: bash
 
-    - name: Install yq
-      run: |
-        echo "Installing yq..."
-        mkdir -p $HOME/bin
-        wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O $HOME/bin/yq
-        chmod +x $HOME/bin/yq
-        echo "Adding $HOME/bin to PATH"
-        echo "$HOME/bin" >> $GITHUB_PATH
-        echo "yq installed successfully"
-      shell: bash
-
     - name: Write Kubeconfig to File (if provided)
       shell: bash
       run: |
@@ -122,20 +111,51 @@ runs:
         # Log the exit code and continue
         echo "Debug: TCA analysis completed with exit code $EXIT_CODE"
         echo "tca-exit-code=$EXIT_CODE" >> $GITHUB_ENV
-
         echo "Debug: TCA analysis completed"
+
+        cat "$TMP_OUTPUT"
         
-        # Extract names and namespaces from the YAML file
-        echo "Debug: Extracting names and namespaces from YAML"
-        namespaces=$(yq eval '.metadata | .name + " " + .namespace' ${{ inputs.mesh-config }} | sed '/---/d' | grep -v null | sort | uniq)
-
-        # Debugging: Print extracted names and namespaces
-        echo "Debug: Extracted names and namespaces:"
-        echo "$namespaces"
-
         # Filter TCA output for matching names and namespaces
         echo "Debug: Filtering TCA output"
         FILTERED_OUTPUT=$(mktemp)
+
+        # Extract names and namespaces from the mesh config
+        namespaces=""
+        if [[ -n "${{ inputs.mesh-config }}" ]]; then
+          echo "Debug: Extracting names and namespaces from mesh config"
+          namespaces=$(gawk '
+            BEGIN { RS="---"; FS="\n" }
+            /metadata:/ {
+              name=""; namespace="";
+              in_metadata=0;
+              for (i=1; i<=NF; i++) {
+                if ($i ~ /metadata:/) { in_metadata=1; continue }
+                if (in_metadata && $i ~ /name:/) {
+                  name = gensub(/.*name: */, "", "g", $i)
+                  name = gensub(/#.*/, "", "g", name)  # Remove comments
+                  gsub(/^ +| +$/, "", name)           # Trim spaces
+                }
+                if (in_metadata && $i ~ /namespace:/) {
+                  namespace = gensub(/.*namespace: */, "", "g", $i)
+                  namespace = gensub(/#.*/, "", "g", namespace)  # Remove comments
+                  gsub(/^ +| +$/, "", namespace)                # Trim spaces
+                }
+                # Break out of metadata when another section starts
+                if (in_metadata && $i !~ /^ / && $i ~ /:/) {
+                  in_metadata=0;
+                }
+              }
+              if (name != "" && namespace != "") {
+                print name " " namespace
+              }
+            }
+          ' "${{ inputs.mesh-config }}" | sort | uniq)
+
+          echo "Debug: Extracted names and namespaces:"
+          echo "$namespaces"
+        else
+          echo "Debug: No mesh config provided"
+        fi
 
         # Iterate over the original rows in TMP_OUTPUT
         echo "Debug: Processing original rows" >&2
@@ -155,6 +175,8 @@ runs:
             fi
           done
         done > "$FILTERED_OUTPUT"
+
+        cat "$FILTERED_OUTPUT"
 
         # Calculate summary counts dynamically from the filtered table
         echo "Debug: Calculating error and warning counts from the filtered table"
