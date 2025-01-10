@@ -15,7 +15,7 @@ inputs:
     required: false
     default: ""
   kube-config:
-    description: "Base64 encoded Kubernetes config file for cluster analysis. Not used in local-only mode"
+    description: "Kubernetes config file content for cluster analysis. Not used in local-only mode"
     required: false
     default: ""
   version:
