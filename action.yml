@@ -203,14 +203,13 @@ runs:
             echo "✅ TCA analysis completed successfully with no issues"
           fi
           echo
-          echo "| NO. | GROUP    | SEVERITY | CODE    | KIND            | NAME                          | NAMESPACE     | DESCRIPTION                                                         |"
-          echo "|-----|----------|----------|---------|-----------------|-------------------------------|---------------|---------------------------------------------------------------------|"
+          echo "| NO. | SEVERITY | CODE    | KIND            | NAME                          | NAMESPACE     | DESCRIPTION                                                         |"
+          echo "|-----|----------|---------|-----------------|-------------------------------|---------------|--------------------------------------------------------------------|"
 
           # Iterate over rows and add links to CODE column while preserving alignment
-          awk 'NR > 3' "$FILTERED_OUTPUT" | while read -r row; do
+          NEW_ROW_NUM=1
+          while read -r row; do
             # Extract and clean up individual columns
-            no=$(echo "$row" | awk -F'│' '{print $2}' | xargs)
-            group=$(echo "$row" | awk -F'│' '{print $3}' | xargs)
             severity=$(echo "$row" | awk -F'│' '{print $4}' | xargs)
             code=$(echo "$row" | awk -F'│' '{print $5}' | xargs)
             kind=$(echo "$row" | awk -F'│' '{print $6}' | xargs)
@@ -222,9 +221,11 @@ runs:
             code_link="[${code}](https://docs.tetrate.io/istio-subscription/tools/tca/analysis/${code})"
 
             # Format the row as a Markdown table row
-            printf "| %-3s | %-8s | %-8s | %-7s | %-17s | %-30s | %-13s | %-67s |\n" \
-              "$no" "$group" "$severity" "$code_link" "$kind" "$name" "$namespace" "$description"
-          done
+            printf "| %-3s | %-8s | %-7s | %-17s | %-30s | %-13s | %-67s |\n" \
+              "$NEW_ROW_NUM" "$severity" "$code_link" "$kind" "$name" "$namespace" "$description"
+            
+            NEW_ROW_NUM=$((NEW_ROW_NUM + 1))
+          done < "$FILTERED_OUTPUT"
 
         } > "$OUTPUT_FILE"
 
