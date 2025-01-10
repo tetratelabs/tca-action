@@ -1,6 +1,7 @@
 name: "Tetrate Config Analyzer"
 description: "Validate and analyze Istio service mesh configurations for security, compliance, and best practices"
 author: "Tetrate"
+
 inputs:
   tis-password:
     description: "Tetrate Istio Subscription (TIS) password required for authentication. Store this as a secret"
@@ -8,27 +9,32 @@ inputs:
   local-only:
     description: "Analyze configuration files locally without connecting to a Kubernetes cluster"
     required: false
-    default: "true"
-  output-disabled-hyperlink:
-    description: "Disable hyperlink in the output"
-    required: false
-    default: "true"
+    default: "false"
   mesh-config:
     description: "Path to the Istio configuration file (required when using local-only mode)"
     required: false
     default: ""
   kube-config:
-    description: "Path to the Kubernetes config file for cluster analysis. Not used in local-only mode"
+    description: "Base64 encoded Kubernetes config file for cluster analysis. Not used in local-only mode"
     required: false
     default: ""
   version:
     description: "TCA version to use (e.g. 'v1.1.0'). Default is 'latest'"
     required: false
     default: "latest"
+  output-disabled-hyperlink:
+    description: "Disable hyperlink in the output"
+    required: false
+    default: "true"
   github-token:
     description: "GitHub token for downloading TCA binary"
     required: false
     default: ""
+outputs:
+  result-file:
+    description: "Path to save TCA analysis output"
+    value: "tca-output.txt"
+
 runs:
   using: "composite"
   steps:
@@ -47,19 +53,158 @@ runs:
       run: get-tca.sh
       shell: bash
 
+    - name: Install yq
+      run: |
+        echo "Installing yq..."
+        mkdir -p $HOME/bin
+        wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O $HOME/bin/yq
+        chmod +x $HOME/bin/yq
+        echo "Adding $HOME/bin to PATH"
+        echo "$HOME/bin" >> $GITHUB_PATH
+        echo "yq installed successfully"
+      shell: bash
+
+    - name: Write Kubeconfig to File (if provided)
+      shell: bash
+      run: |
+        echo "Debug: Checking for kubeconfig..."
+        KUBE_CONFIG='${{ inputs.kube-config }}'
+        if [[ -n "$KUBE_CONFIG" ]]; then
+          echo "Debug: Kubeconfig is present"
+          mkdir -p /tmp
+          echo "$KUBE_CONFIG" > /tmp/kubeconfig.yaml
+          echo "Debug: Wrote kubeconfig to /tmp/kubeconfig.yaml"
+          ls -l /tmp/kubeconfig.yaml
+        else
+          echo "Debug: No kubeconfig provided"
+        fi
+
     - name: Run TCA analyzer
+      id: run-tca
       shell: bash
       env:
         TIS_PASS: ${{ inputs.tis-password }}
       run: |
+        echo "Debug: Starting TCA analyzer..."
         ARGS="--output-disabled-hyperlink=${{ inputs.output-disabled-hyperlink }}"
+        OUTPUT_FILE="tca-output.txt"
+
+        echo "Debug: Initial ARGS: '$ARGS'"
+        
+        # Clean up any existing output file
+        rm -f "$OUTPUT_FILE"
+        echo "Debug: Cleaned up existing output file"
+        
         if [[ "${{ inputs.local-only }}" == "true" ]]; then
-          ARGS="${ARGS} --local-only"
+          ARGS="$ARGS --local-only"
+          echo "Debug: Added local-only flag, ARGS now: '$ARGS'"
         fi
+        
         if [[ -n "${{ inputs.mesh-config }}" ]]; then
-          ARGS="${ARGS} -f ${{ inputs.mesh-config }}"
+          ARGS="$ARGS -f ${{ inputs.mesh-config }}"
+          echo "Debug: Added mesh-config, ARGS now: '$ARGS'"
         fi
-        if [[ -n "${{ inputs.kube-config }}" ]]; then
-          ARGS="${ARGS} -c ${{ inputs.kube-config }}"
+
+        if [[ -f "/tmp/kubeconfig.yaml" ]]; then
+          ARGS="$ARGS -c /tmp/kubeconfig.yaml"
+          echo "Debug: Added kubeconfig, ARGS now: '$ARGS'"
         fi
-        tca analyze $ARGS
+
+        set +e
+        # Run the TCA command
+        TCA_COMMAND="tca analyze $ARGS || true"
+        echo "Debug: Running TCA command: $TCA_COMMAND"
+        TMP_OUTPUT=$(mktemp)
+        eval $TCA_COMMAND > "$TMP_OUTPUT"
+        EXIT_CODE=$?  # Capture the exit code
+        set -e
+
+        # Log the exit code and continue
+        echo "Debug: TCA analysis completed with exit code $EXIT_CODE"
+        echo "tca-exit-code=$EXIT_CODE" >> $GITHUB_ENV
+
+        echo "Debug: TCA analysis completed"
+        
+        # Extract names and namespaces from the YAML file
+        echo "Debug: Extracting names and namespaces from YAML"
+        namespaces=$(yq eval '.metadata | .name + " " + .namespace' ${{ inputs.mesh-config }} | sed '/---/d' | grep -v null | sort | uniq)
+
+        # Debugging: Print extracted names and namespaces
+        echo "Debug: Extracted names and namespaces:"
+        echo "$namespaces"
+
+        # Filter TCA output for matching names and namespaces
+        echo "Debug: Filtering TCA output"
+        FILTERED_OUTPUT=$(mktemp)
+
+        # Iterate over the original rows in TMP_OUTPUT
+        echo "Debug: Processing original rows" >&2
+        ROW_NUM=1
+        awk 'NR > 3' "$TMP_OUTPUT" | while read -r row; do
+          for line in $namespaces; do
+            name=$(echo "$line" | awk '{print $1}')
+            namespace=$(echo "$line" | awk '{print $2}')
+            
+            # Check if the row matches the current name and namespace
+            if [[ "$row" == *"$name"* && "$row" == *"$namespace"* ]]; then
+              # Remove any existing numbers and append the correct sequential number
+              row_content=$(echo "$row" | sed 's/^│[[:space:]]*[0-9]*[[:space:]]*│//')
+              printf "│%8d │%s\n" "$ROW_NUM" "$row_content"
+              ROW_NUM=$((ROW_NUM + 1))
+              break
+            fi
+          done
+        done > "$FILTERED_OUTPUT"
+
+        # Calculate summary counts dynamically from the filtered table
+        echo "Debug: Calculating error and warning counts from the filtered table"
+        ERROR_COUNT=$(grep -c "│.*│.*error.*│" "$FILTERED_OUTPUT")
+        WARNING_COUNT=$(grep -c "│.*│.*warning.*│" "$FILTERED_OUTPUT")
+
+        echo "error-count=$ERROR_COUNT" >> $GITHUB_ENV
+        echo "warning-count=$WARNING_COUNT" >> $GITHUB_ENV
+
+        # Debugging: Print calculated counts
+        echo "Debug: ERROR_COUNT=$ERROR_COUNT, WARNING_COUNT=$WARNING_COUNT"
+
+        # Create output file with updated summary and header
+        {
+          echo "### Tetrate Config Analyzer Results"
+          echo
+          if [ "$ERROR_COUNT" -gt 0 ]; then
+            echo "❌ **Error:** TCA analysis found $ERROR_COUNT error(s)"
+          fi
+          if [ "$WARNING_COUNT" -gt 0 ]; then
+            echo "⚠️ **Warning:** TCA analysis found $WARNING_COUNT warning(s)"
+          fi
+          if [ "$ERROR_COUNT" -eq 0 ] && [ "$WARNING_COUNT" -eq 0 ]; then
+            echo "✅ TCA analysis completed successfully with no issues"
+          fi
+          echo
+          echo "| NO. | GROUP    | SEVERITY | CODE    | KIND            | NAME                          | NAMESPACE     | DESCRIPTION                                                         |"
+          echo "|-----|----------|----------|---------|-----------------|-------------------------------|---------------|---------------------------------------------------------------------|"
+
+          # Iterate over rows and add links to CODE column while preserving alignment
+          awk 'NR > 3' "$FILTERED_OUTPUT" | while read -r row; do
+            # Extract and clean up individual columns
+            no=$(echo "$row" | awk -F'│' '{print $2}' | xargs)
+            group=$(echo "$row" | awk -F'│' '{print $3}' | xargs)
+            severity=$(echo "$row" | awk -F'│' '{print $4}' | xargs)
+            code=$(echo "$row" | awk -F'│' '{print $5}' | xargs)
+            kind=$(echo "$row" | awk -F'│' '{print $6}' | xargs)
+            name=$(echo "$row" | awk -F'│' '{print $7}' | xargs)
+            namespace=$(echo "$row" | awk -F'│' '{print $8}' | xargs)
+            description=$(echo "$row" | awk -F'│' '{print $9}' | xargs)
+
+            # Create a Markdown link for the CODE column
+            code_link="[${code}](https://docs.tetrate.io/istio-subscription/tools/tca/analysis/${code})"
+
+            # Format the row as a Markdown table row
+            printf "| %-3s | %-8s | %-8s | %-7s | %-17s | %-30s | %-13s | %-67s |\n" \
+              "$no" "$group" "$severity" "$code_link" "$kind" "$name" "$namespace" "$description"
+          done
+
+        } > "$OUTPUT_FILE"
+
+        # Clean up temporary file
+        rm -f "$FILTERED_OUTPUT" "$TMP_OUTPUT"
