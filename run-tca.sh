@@ -16,13 +16,12 @@ WORKSPACE_DIR="${GITHUB_WORKSPACE:-$PWD}"
 
 # Default values
 OUTPUT_FILE="${1:-tca-output.txt}"
-OUTPUT_DISABLED_HYPERLINK="${OUTPUT_DISABLED_HYPERLINK:-true}"
 LOCAL_ONLY="${LOCAL_ONLY:-false}"
 MESH_CONFIG="${MESH_CONFIG:-}"
 KUBE_CONFIG="${KUBE_CONFIG:-}"
 
 debug "Starting TCA analyzer..."
-ARGS="--output-disabled-hyperlink=$OUTPUT_DISABLED_HYPERLINK"
+ARGS="--output-disabled-hyperlink=true"
 
 debug "Initial ARGS: '$ARGS'"
 

@@ -22,10 +22,6 @@ inputs:
     description: "TCA version to use (e.g. 'v1.1.0'). Default is 'latest'"
     required: false
     default: "latest"
-  output-disabled-hyperlink:
-    description: "Disable hyperlink in the output"
-    required: false
-    default: "true"
   github-token:
     description: "GitHub token for downloading TCA binary"
     required: false
@@ -33,7 +29,7 @@ inputs:
 outputs:
   result-file:
     description: "Path to save TCA analysis output"
-    value: "tca-output.txt"
+    value: "${{ github.workspace }}/tca-output.txt"
 
 runs:
   using: "composite"
@@ -45,12 +41,12 @@ runs:
 
     - name: Get TCA binary
       shell: bash
-      run: |
-        ${{ github.action_path }}/get-tca.sh
       env:
         TIS_PASS: ${{ inputs.tis-password }}
         TCA_VERSION: ${{ inputs.version }}
         GITHUB_ACCESS_TOKEN: ${{ inputs.github-token }}
+      run: |
+        ${{ github.action_path }}/get-tca.sh
 
     - name: Write Kubeconfig to File (if provided)
       shell: bash
@@ -76,11 +72,10 @@ runs:
 
     - name: Run TCA analyzer
       shell: bash
-      run: |
-        ${{ github.action_path }}/run-tca.sh ${{ github.workspace }}/tca-output.txt
       env:
         TIS_PASS: ${{ inputs.tis-password }}
         MESH_CONFIG: ${{ inputs.mesh-config }}
         LOCAL_ONLY: ${{ inputs.local-only }}
-        OUTPUT_DISABLED_HYPERLINK: ${{ inputs.output-disabled-hyperlink }}
         KUBE_CONFIG: /tmp/kubeconfig.yaml
+      run: |
+        ${{ github.action_path }}/run-tca.sh ${{ github.workspace }}/tca-output.txt
