@@ -38,196 +38,49 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - name: Set GitHub Path
-      run: echo "$GITHUB_ACTION_PATH" >> $GITHUB_PATH
+    - name: Add action directory to path
       shell: bash
-      env:
-        GITHUB_ACTION_PATH: ${{ github.action_path }}
+      run: |
+        echo "$GITHUB_ACTION_PATH" >> $GITHUB_PATH
 
     - name: Get TCA binary
-      id: get-tca
+      shell: bash
+      run: |
+        ${{ github.action_path }}/get-tca.sh
       env:
         TIS_PASS: ${{ inputs.tis-password }}
         TCA_VERSION: ${{ inputs.version }}
         GITHUB_ACCESS_TOKEN: ${{ inputs.github-token }}
-      run: get-tca.sh
-      shell: bash
 
     - name: Write Kubeconfig to File (if provided)
       shell: bash
       run: |
-        echo "Debug: Checking for kubeconfig..."
+        # Define debug function
+        function debug() {
+          if [[ "${RUNNER_DEBUG:-}" == "1" ]]; then
+            echo "$@"
+          fi
+        }
+        debug "Checking for kubeconfig presence..."
+        
         KUBE_CONFIG='${{ inputs.kube-config }}'
         if [[ -n "$KUBE_CONFIG" ]]; then
-          echo "Debug: Kubeconfig is present"
+          debug "Kubeconfig is present"
           mkdir -p /tmp
           echo "$KUBE_CONFIG" > /tmp/kubeconfig.yaml
-          echo "Debug: Wrote kubeconfig to /tmp/kubeconfig.yaml"
-          ls -l /tmp/kubeconfig.yaml
+          debug "Wrote kubeconfig to /tmp/kubeconfig.yaml"
+          debug "Kubeconfig file permissions: $(ls -l /tmp/kubeconfig.yaml)"
         else
-          echo "Debug: No kubeconfig provided"
+          debug "No kubeconfig provided"
         fi
 
     - name: Run TCA analyzer
-      id: run-tca
       shell: bash
+      run: |
+        ${{ github.action_path }}/run-tca.sh ${{ github.workspace }}/tca-output.txt
       env:
         TIS_PASS: ${{ inputs.tis-password }}
-      run: |
-        echo "Debug: Starting TCA analyzer..."
-        ARGS="--output-disabled-hyperlink=${{ inputs.output-disabled-hyperlink }}"
-        OUTPUT_FILE="tca-output.txt"
-
-        echo "Debug: Initial ARGS: '$ARGS'"
-        
-        # Clean up any existing output file
-        rm -f "$OUTPUT_FILE"
-        echo "Debug: Cleaned up existing output file"
-        
-        if [[ "${{ inputs.local-only }}" == "true" ]]; then
-          ARGS="$ARGS --local-only"
-          echo "Debug: Added local-only flag, ARGS now: '$ARGS'"
-        fi
-        
-        if [[ -n "${{ inputs.mesh-config }}" ]]; then
-          ARGS="$ARGS -f ${{ inputs.mesh-config }}"
-          echo "Debug: Added mesh-config, ARGS now: '$ARGS'"
-        fi
-
-        if [[ -f "/tmp/kubeconfig.yaml" ]]; then
-          ARGS="$ARGS -c /tmp/kubeconfig.yaml"
-          echo "Debug: Added kubeconfig, ARGS now: '$ARGS'"
-        fi
-
-        set +e
-        # Run the TCA command
-        TCA_COMMAND="tca analyze $ARGS || true"
-        echo "Debug: Running TCA command: $TCA_COMMAND"
-        TMP_OUTPUT=$(mktemp)
-        eval $TCA_COMMAND > "$TMP_OUTPUT"
-        EXIT_CODE=$?  # Capture the exit code
-        set -e
-
-        # Log the exit code and continue
-        echo "Debug: TCA analysis completed with exit code $EXIT_CODE"
-        echo "tca-exit-code=$EXIT_CODE" >> $GITHUB_ENV
-        echo "Debug: TCA analysis completed"
-
-        cat "$TMP_OUTPUT"
-        
-        # Filter TCA output for matching names and namespaces
-        echo "Debug: Filtering TCA output"
-        FILTERED_OUTPUT=$(mktemp)
-
-        # Extract names and namespaces from the mesh config
-        namespaces=""
-        if [[ -n "${{ inputs.mesh-config }}" ]]; then
-          echo "Debug: Extracting names and namespaces from mesh config"
-          namespaces=$(gawk '
-            BEGIN { RS="---"; FS="\n" }
-            /metadata:/ {
-              name=""; namespace="";
-              in_metadata=0;
-              for (i=1; i<=NF; i++) {
-                if ($i ~ /metadata:/) { in_metadata=1; continue }
-                if (in_metadata && $i ~ /name:/) {
-                  name = gensub(/.*name: */, "", "g", $i)
-                  name = gensub(/#.*/, "", "g", name)  # Remove comments
-                  gsub(/^ +| +$/, "", name)           # Trim spaces
-                }
-                if (in_metadata && $i ~ /namespace:/) {
-                  namespace = gensub(/.*namespace: */, "", "g", $i)
-                  namespace = gensub(/#.*/, "", "g", namespace)  # Remove comments
-                  gsub(/^ +| +$/, "", namespace)                # Trim spaces
-                }
-                # Break out of metadata when another section starts
-                if (in_metadata && $i !~ /^ / && $i ~ /:/) {
-                  in_metadata=0;
-                }
-              }
-              if (name != "" && namespace != "") {
-                print name " " namespace
-              }
-            }
-          ' "${{ inputs.mesh-config }}" | sort | uniq)
-
-          echo "Debug: Extracted names and namespaces:"
-          echo "$namespaces"
-        else
-          echo "Debug: No mesh config provided"
-        fi
-
-        # Iterate over the original rows in TMP_OUTPUT
-        echo "Debug: Processing original rows" >&2
-        ROW_NUM=1
-        awk 'NR > 3' "$TMP_OUTPUT" | while read -r row; do
-          for line in $namespaces; do
-            name=$(echo "$line" | awk '{print $1}')
-            namespace=$(echo "$line" | awk '{print $2}')
-            
-            # Check if the row matches the current name and namespace
-            if [[ "$row" == *"$name"* && "$row" == *"$namespace"* ]]; then
-              # Remove any existing numbers and append the correct sequential number
-              row_content=$(echo "$row" | sed 's/^│[[:space:]]*[0-9]*[[:space:]]*│//')
-              printf "│%8d │%s\n" "$ROW_NUM" "$row_content"
-              ROW_NUM=$((ROW_NUM + 1))
-              break
-            fi
-          done
-        done > "$FILTERED_OUTPUT"
-
-        cat "$FILTERED_OUTPUT"
-
-        # Calculate summary counts dynamically from the filtered table
-        echo "Debug: Calculating error and warning counts from the filtered table"
-        ERROR_COUNT=$(grep -c "│.*│.*error.*│" "$FILTERED_OUTPUT")
-        WARNING_COUNT=$(grep -c "│.*│.*warning.*│" "$FILTERED_OUTPUT")
-
-        echo "error-count=$ERROR_COUNT" >> $GITHUB_ENV
-        echo "warning-count=$WARNING_COUNT" >> $GITHUB_ENV
-
-        # Debugging: Print calculated counts
-        echo "Debug: ERROR_COUNT=$ERROR_COUNT, WARNING_COUNT=$WARNING_COUNT"
-
-        # Create output file with updated summary and header
-        {
-          echo "### Tetrate Config Analyzer Results"
-          echo
-          if [ "$ERROR_COUNT" -gt 0 ]; then
-            echo "❌ **Error:** TCA analysis found $ERROR_COUNT error(s)"
-          fi
-          if [ "$WARNING_COUNT" -gt 0 ]; then
-            echo "⚠️ **Warning:** TCA analysis found $WARNING_COUNT warning(s)"
-          fi
-          if [ "$ERROR_COUNT" -eq 0 ] && [ "$WARNING_COUNT" -eq 0 ]; then
-            echo "✅ TCA analysis completed successfully with no issues"
-          fi
-          echo
-          echo "| NO. | SEVERITY | CODE    | KIND            | NAME                          | NAMESPACE     | DESCRIPTION                                                         |"
-          echo "|-----|----------|---------|-----------------|-------------------------------|---------------|--------------------------------------------------------------------|"
-
-          # Iterate over rows and add links to CODE column while preserving alignment
-          NEW_ROW_NUM=1
-          while read -r row; do
-            # Extract and clean up individual columns
-            severity=$(echo "$row" | awk -F'│' '{print $4}' | xargs)
-            code=$(echo "$row" | awk -F'│' '{print $5}' | xargs)
-            kind=$(echo "$row" | awk -F'│' '{print $6}' | xargs)
-            name=$(echo "$row" | awk -F'│' '{print $7}' | xargs)
-            namespace=$(echo "$row" | awk -F'│' '{print $8}' | xargs)
-            description=$(echo "$row" | awk -F'│' '{print $9}' | xargs)
-
-            # Create a Markdown link for the CODE column
-            code_link="[${code}](https://docs.tetrate.io/istio-subscription/tools/tca/analysis/${code})"
-
-            # Format the row as a Markdown table row
-            printf "| %-3s | %-8s | %-7s | %-17s | %-30s | %-13s | %-67s |\n" \
-              "$NEW_ROW_NUM" "$severity" "$code_link" "$kind" "$name" "$namespace" "$description"
-            
-            NEW_ROW_NUM=$((NEW_ROW_NUM + 1))
-          done < "$FILTERED_OUTPUT"
-
-        } > "$OUTPUT_FILE"
-
-        # Clean up temporary file
-        rm -f "$FILTERED_OUTPUT" "$TMP_OUTPUT"
+        MESH_CONFIG: ${{ inputs.mesh-config }}
+        LOCAL_ONLY: ${{ inputs.local-only }}
+        OUTPUT_DISABLED_HYPERLINK: ${{ inputs.output-disabled-hyperlink }}
+        KUBE_CONFIG: /tmp/kubeconfig.yaml
