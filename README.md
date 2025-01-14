@@ -48,7 +48,6 @@ jobs:
           tis-password: ${{ secrets.TIS_PASSWORD }}
           mesh-config: "./invalid.yaml"
           kube-config: ${{ secrets.KUBECONFIG }}
-          github-token: ${{ secrets.TOKEN_FOR_GITHUB }}
 
       - name: Comment on PR
         uses: thollander/actions-comment-pull-request@v3
@@ -100,7 +99,7 @@ jobs:
 
 ### Cluster Mode
 
-For analyzing deployed configurations in your cluster:
+For periodically analyzing deployed configurations in your cluster:
 
 ```yaml
 name: Cluster Analysis

@@ -22,10 +22,6 @@ inputs:
     description: "TCA version to use (e.g. 'v1.1.0'). Default is 'latest'"
     required: false
     default: "latest"
-  github-token:
-    description: "GitHub token for downloading TCA binary"
-    required: false
-    default: ""
 outputs:
   result-file:
     description: "Path to save TCA analysis output"
@@ -44,7 +40,6 @@ runs:
       env:
         TIS_PASS: ${{ inputs.tis-password }}
         TCA_VERSION: ${{ inputs.version }}
-        GITHUB_ACCESS_TOKEN: ${{ inputs.github-token }}
       run: |
         ${{ github.action_path }}/get-tca.sh
 
