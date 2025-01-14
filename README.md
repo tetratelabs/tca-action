@@ -25,20 +25,41 @@ Hybrid mode analyze configuration that you want to apply with cluster context:
 
 ```yaml
 name: Hybrid Config Analysis
-on: [pull_request]
+
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
+    branches:
+      - "main"
 
 jobs:
-  analyze:
+  analyze-configs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: TCA Hybrid Analysis
-        uses: tetratelabs/tca-action@main
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate Istio Configs
+        id: tca
+        uses: aegisworks/istio-action@main
         with:
           tis-password: ${{ secrets.TIS_PASSWORD }}
-          mesh-config: "./path/to/mesh-configs.yaml"
+          mesh-config: "./invalid.yaml"
           kube-config: ${{ secrets.KUBECONFIG }}
+          github-token: ${{ secrets.TOKEN_FOR_GITHUB }}
+
+      - name: Comment on PR
+        uses: thollander/actions-comment-pull-request@v3
+        with:
+          file-path: ${{ steps.tca.outputs.result-file }}
+
+      - name: Optionally Fail if there are errors
+        run: |
+          if [ ${{ env.error-count }} -gt 0 ]; then
+            exit 1
+          fi
 ```
 
 ### Local-Only Mode
@@ -53,13 +74,21 @@ Use this mode for initial validation of configuration files without cluster acce
 
 ```yaml
 name: Local Config Analysis
-on: [pull_request]
+
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
+    branches:
+      - "main"
 
 jobs:
-  analyze:
+  analyze-configs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
       
       - name: TCA Local Analysis
         uses: tetratelabs/tca-action@main
@@ -85,82 +114,14 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
       
       - name: Run TCA Analysis
         uses: tetratelabs/tca-action@main
         with:
           tis-password: ${{ secrets.TIS_PASSWORD }}
           kube-config: ${{ secrets.KUBECONFIG }}
-```
-
-## Advanced Usage
-
-Following is more complete example that
-
-- combines all existing Istio config files in a repository
-- uses TCA to analyze the combined config
-- adds PR comment to show TCA output
-- requires appropriate permissions for GITHUB_TOKEN to post comments. See GitHub's documentation on [defining token permissions](https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/controlling-permissions-for-github_token#defining-access-for-the-github_token-permissions) for more details.
-
-```yaml
-name: Validate Istio Configs
-permissions:
-  pull-requests: write  # Required for commenting on PRs
-on:
-  pull_request:
-    paths:
-      - 'istio/**'
-      - 'manifests/**'
-
-jobs:
-  validate-configs:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      # Collect and combine Istio configs
-      - name: Collect Istio Configs
-        run: |
-          # Create directory for combined configs
-          mkdir -p ./combined
-
-          # Collect all Istio related YAMLs into single file
-          {
-            echo "# Combined Istio Configurations"
-            echo "---"
-            
-            # Find and combine specific Istio API versions
-            find . -type f -name "*.yaml" -o -name "*.yml" | \
-            while read -r file; do
-              # Only process files containing Istio API versions
-              if grep -q "apiVersion: \(networking\|security\|telemetry\).istio.io" "$file"; then
-                echo "# Source: $file"
-                cat "$file"
-                echo "---"
-              fi
-            done
-          } > ./combined/mesh-configs.yaml
-      
-      # Run TCA analysis
-      - name: Validate Istio Configs
-        id: analyze
-        uses: tetratelabs/tca-action@main
-        with:
-          tis-password: ${{ secrets.TIS_PASSWORD }}
-          mesh-config: "./combined/mesh-configs.yaml"
-          kube-config: ${{ secrets.KUBECONFIG }}
-
-      # Add comment on PR with the analysis results
-      - name: Comment on PR
-        if: always()
-        uses: thollander/actions-comment-pull-request@v3
-        with:
-          message: |
-            ### Tetrate Config Analyzer Results
-            ```
-            ${{ steps.analyze.outputs.stdout }}
-            ```
 ```
 
 ## Configuration Reference
@@ -174,6 +135,12 @@ jobs:
 | `mesh-config` | Path to the Istio service mesh configuration file (required when using local-only mode) | No | `""` |
 | `kube-config` | Path to the Kubernetes config file for cluster analysis. Not used in local-only mode | No | `""` |
 | `version` | TCA version to use (e.g. '1.2.3'). Use 'latest' for most recent version | No | `latest` |
+
+### Output Parameters
+
+| Input | Description | Value |
+|-------|-------------|-------|
+| `result-file` | Path of TCA analysis output result. Use markdown format | `${{ github.workspace }}/tca-output.txt` |
 
 ## Support
 

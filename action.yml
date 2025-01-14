@@ -1,6 +1,7 @@
 name: "Tetrate Config Analyzer"
 description: "Validate and analyze Istio service mesh configurations for security, compliance, and best practices"
 author: "Tetrate"
+
 inputs:
   tis-password:
     description: "Tetrate Istio Subscription (TIS) password required for authentication. Store this as a secret"
@@ -8,17 +9,13 @@ inputs:
   local-only:
     description: "Analyze configuration files locally without connecting to a Kubernetes cluster"
     required: false
-    default: "true"
-  output-disabled-hyperlink:
-    description: "Disable hyperlink in the output"
-    required: false
-    default: "true"
+    default: "false"
   mesh-config:
     description: "Path to the Istio configuration file (required when using local-only mode)"
     required: false
     default: ""
   kube-config:
-    description: "Path to the Kubernetes config file for cluster analysis. Not used in local-only mode"
+    description: "Kubernetes config file content for cluster analysis. Not used in local-only mode"
     required: false
     default: ""
   version:
@@ -29,37 +26,56 @@ inputs:
     description: "GitHub token for downloading TCA binary"
     required: false
     default: ""
+outputs:
+  result-file:
+    description: "Path to save TCA analysis output"
+    value: "${{ github.workspace }}/tca-output.txt"
+
 runs:
   using: "composite"
   steps:
-    - name: Set GitHub Path
-      run: echo "$GITHUB_ACTION_PATH" >> $GITHUB_PATH
+    - name: Add action directory to path
       shell: bash
-      env:
-        GITHUB_ACTION_PATH: ${{ github.action_path }}
+      run: |
+        echo "$GITHUB_ACTION_PATH" >> $GITHUB_PATH
 
     - name: Get TCA binary
-      id: get-tca
+      shell: bash
       env:
         TIS_PASS: ${{ inputs.tis-password }}
         TCA_VERSION: ${{ inputs.version }}
         GITHUB_ACCESS_TOKEN: ${{ inputs.github-token }}
-      run: get-tca.sh
+      run: |
+        ${{ github.action_path }}/get-tca.sh
+
+    - name: Write Kubeconfig to File (if provided)
       shell: bash
+      run: |
+        # Define debug function
+        function debug() {
+          if [[ "${RUNNER_DEBUG:-}" == "1" ]]; then
+            echo "$@"
+          fi
+        }
+        debug "Checking for kubeconfig presence..."
+        
+        KUBE_CONFIG='${{ inputs.kube-config }}'
+        if [[ -n "$KUBE_CONFIG" ]]; then
+          debug "Kubeconfig is present"
+          mkdir -p /tmp
+          echo "$KUBE_CONFIG" > /tmp/kubeconfig.yaml
+          debug "Wrote kubeconfig to /tmp/kubeconfig.yaml"
+          debug "Kubeconfig file permissions: $(ls -l /tmp/kubeconfig.yaml)"
+        else
+          debug "No kubeconfig provided"
+        fi
 
     - name: Run TCA analyzer
       shell: bash
       env:
         TIS_PASS: ${{ inputs.tis-password }}
+        MESH_CONFIG: ${{ inputs.mesh-config }}
+        LOCAL_ONLY: ${{ inputs.local-only }}
+        KUBE_CONFIG: /tmp/kubeconfig.yaml
       run: |
-        ARGS="--output-disabled-hyperlink=${{ inputs.output-disabled-hyperlink }}"
-        if [[ "${{ inputs.local-only }}" == "true" ]]; then
-          ARGS="${ARGS} --local-only"
-        fi
-        if [[ -n "${{ inputs.mesh-config }}" ]]; then
-          ARGS="${ARGS} -f ${{ inputs.mesh-config }}"
-        fi
-        if [[ -n "${{ inputs.kube-config }}" ]]; then
-          ARGS="${ARGS} -c ${{ inputs.kube-config }}"
-        fi
-        tca analyze $ARGS
+        ${{ github.action_path }}/run-tca.sh ${{ github.workspace }}/tca-output.txt
