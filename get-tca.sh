@@ -40,7 +40,15 @@ fi
 # download the TCA file directly from github release
 NAME="tca-auth_${TCA_VERSION}_${OSEXT}_${TCA_ARCH}.tar.gz"
 DOWNLOAD_URL="https://github.com/tetratelabs/tca-action/releases/download/tca-auth-${TCA_VERSION}/${NAME}"
-curl -L -o "${NAME}" "${DOWNLOAD_URL}"
+
+echo "Downloading ${NAME} from ${DOWNLOAD_URL}"
+if curl -L -f -o "${NAME}" "${DOWNLOAD_URL}"; then
+    echo "Successfully downloaded ${NAME}"
+else
+    echo "Failed to download ${NAME} from ${DOWNLOAD_URL}"
+    echo "HTTP Status: $?"
+    exit 1
+fi
 
 # extract the tar file then remove it
 tar -xzf "${NAME}"
