@@ -28,6 +28,8 @@ jobs:
         continue-on-error: true # Continue even if the job fails
         with:
           tis-password: ${{ secrets.TIS_PASS }}
-          mesh-config: ./tca/test/failed.yaml
+          mesh-config: |-
+            ./tca/test/manifest.yaml
+            ./tca/test/failed.yaml
           github-token: ${{ secrets.GITHUB_TOKEN }}
           local-only: true
