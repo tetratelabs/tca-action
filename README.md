@@ -133,7 +133,7 @@ jobs:
 | `local-only` | Analyze configuration files locally without connecting to a Kubernetes cluster | No | `false` |
 | `mesh-config` | Path to the Istio service mesh configuration file (required when using local-only mode) | No | `""` |
 | `kube-config` | Path to the Kubernetes config file for cluster analysis. Not used in local-only mode | No | `""` |
-| `version` | TCA version to use (e.g. '1.2.3'). Use 'latest' for most recent version | No | `latest` |
+| `version` | TCA version to use (e.g. '1.1.0'). Use 'latest' for most recent version | No | `v1.2.0` |
 
 ### Output Parameters
 
