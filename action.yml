@@ -11,7 +11,14 @@ inputs:
     required: false
     default: "false"
   mesh-config:
-    description: "Path to the Istio configuration file (required when using local-only mode)"
+    description: |-
+      Path to the Istio configuration files.
+      Multiple files can be specified using either:
+      - Space-separated list: "./config1.yaml ./config2.yaml"
+      - Newline-separated list using YAML block scalar: 
+        mesh-config: |-
+          ./config1.yaml
+          ./config2.yaml
     required: false
     default: ""
   kube-config:

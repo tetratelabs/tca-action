@@ -46,7 +46,11 @@ jobs:
         uses: aegisworks/istio-action@main
         with:
           tis-password: ${{ secrets.TIS_PASSWORD }}
-          mesh-config: "./invalid.yaml"
+          mesh-config: "./configs/gateway.yaml ./configs/virtualservice.yaml"  # Multiple files with space separator
+          # OR use newline separator
+          # mesh-config: |-
+          #   ./configs/gateway.yaml
+          #   ./configs/virtualservice.yaml
           kube-config: ${{ secrets.KUBECONFIG }}
 
       - name: Comment on PR
@@ -67,9 +71,7 @@ Use this mode for initial validation of configuration files without cluster acce
 
 > [!WARNING]  
 > Since TCA analyze Istio runtime configuration, it needs following resources to be available as part of 
-> mesh-config file: Istio mesh-config configmap, Istiod deployment resource and Istio secrets. 
-> You will need to merge these resources with configurations that you want to apply. 
-
+> mesh-config file: Istio mesh-config configmap, Istiod deployment resource and Istio secrets.
 
 ```yaml
 name: Local Config Analysis
@@ -93,7 +95,9 @@ jobs:
         uses: tetratelabs/tca-action@main
         with:
           tis-password: ${{ secrets.TIS_PASSWORD }}
-          mesh-config: "./path/to/mesh-configs.yaml"   # Must contain Istio mesh configmap, Istiod deployment and secrets
+          mesh-config: |-
+            ./configs/mesh-configs.yaml # Must contain Istio mesh configmap, Istiod deployment and secrets
+            ./configs/app-configs.yaml
           local-only: true
 ```
 
@@ -131,7 +135,7 @@ jobs:
 |-------|-------------|----------|---------|
 | `tis-password` | Tetrate Istio Subscription (TIS) password for authentication | Yes | N/A |
 | `local-only` | Analyze configuration files locally without connecting to a Kubernetes cluster | No | `false` |
-| `mesh-config` | Path to the Istio service mesh configuration file (required when using local-only mode) | No | `""` |
+| `mesh-config` | Path to the Istio service mesh configuration files. Multiple files can be specified using space or newline separator | No | `""` |
 | `kube-config` | Path to the Kubernetes config file for cluster analysis. Not used in local-only mode | No | `""` |
 | `version` | TCA version to use (e.g. '1.1.0'). Use 'latest' for most recent version | No | `v1.2.0` |
 
@@ -140,6 +144,10 @@ jobs:
 | Input | Description | Value |
 |-------|-------------|-------|
 | `result-file` | Path of TCA analysis output result. Use markdown format | `${{ github.workspace }}/tca-output.txt` |
+
+## Debugging
+
+You can get more detailed logs by enabling [debug logging](https://docs.github.com/en/actions/monitoring-and-troubleshooting-workflows/troubleshooting-workflows/enabling-debug-logging) when re-running jobs. This will set an environment variable named RUNNER_DEBUG=1 that is used by the action to print additional logs. Alternatively you can also set the environment variable manually in your action yaml.
 
 ## Support
 

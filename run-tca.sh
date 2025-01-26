@@ -35,12 +35,38 @@ if [[ "$LOCAL_ONLY" == "true" ]]; then
 fi
 
 if [[ -n "$MESH_CONFIG" ]]; then
-    # Handle relative paths
-    if [[ "$MESH_CONFIG" == ./* ]]; then
-        MESH_CONFIG="$WORKSPACE_DIR/$MESH_CONFIG"
+    # Handle both space-separated and newline-separated lists
+    # Convert newlines to spaces and split into array
+    IFS=' ' read -r -a config_files <<< "${MESH_CONFIG//$'\n'/ }"
+    
+    for config_file in "${config_files[@]}"; do
+        # Trim whitespace
+        config_file="${config_file## }"
+        config_file="${config_file%% }"
+        
+        if [[ -n "$config_file" ]]; then
+            # Handle relative paths
+            if [[ "$config_file" == ./* ]]; then
+                config_file="$WORKSPACE_DIR/$config_file"
+            fi
+            
+            # Check if file exists
+            if [[ -f "$config_file" ]]; then
+                valid_config_files+=("$config_file")
+                ARGS="$ARGS -f $config_file"
+                debug "Added mesh-config file: $config_file, ARGS now: '$ARGS'"
+            else
+                debug "Skipping non-existent file: $config_file"
+                echo "Warning: Config file not found: $config_file"
+            fi
+        fi
+    done
+
+    # Exit if no valid config files found when mesh config is specified
+    if [[ ${#valid_config_files[@]} -eq 0 && -n "$MESH_CONFIG" ]]; then
+        echo "Error: No valid configuration files found"
+        exit 1
     fi
-    ARGS="$ARGS -f $MESH_CONFIG"
-    debug "Added mesh-config, ARGS now: '$ARGS'"
 fi
 
 if [[ -n "$KUBE_CONFIG" ]]; then
@@ -63,9 +89,21 @@ set +e
 TCA_COMMAND="tca analyze $ARGS || true"
 debug "Running TCA command: $TCA_COMMAND"
 TMP_OUTPUT=$(mktemp)
-eval $TCA_COMMAND > "$TMP_OUTPUT"
+TMP_ERROR=$(mktemp)
+eval $TCA_COMMAND > "$TMP_OUTPUT" 2> "$TMP_ERROR"
 EXIT_CODE=$?  # Capture the exit code
 set -e
+
+# Check for specific error conditions
+if [[ "$LOCAL_ONLY" == "true" ]] && grep -q "istiod deployment not found" "$TMP_ERROR"; then
+    echo "Error: Local mode requires Istiod deployment configuration."
+    echo "Please ensure your mesh-config includes:"
+    echo "  - Istiod deployment"
+    echo "  - Istio mesh-config configmap"
+    echo "  - Istio secrets"
+    rm -f "$TMP_OUTPUT" "$TMP_ERROR"
+    exit 1
+fi
 
 # Log the exit code and continue
 debug "TCA analysis completed with exit code $EXIT_CODE"
@@ -104,89 +142,52 @@ debug "Created temporary file for filtered output: $FILTERED_OUTPUT"
 # Filter TCA output for matching names and namespaces
 debug "Filtering TCA output"
 
-# Determine which awk to use
-if [[ "$(uname)" == "Darwin" ]]; then
-    AWK_CMD="gawk"
-else
-    AWK_CMD="awk"
-fi
-
-# Extract names and namespaces from the mesh config
+# Extract names and namespaces from all mesh config files
 namespaces=""
 if [[ -n "$MESH_CONFIG" ]]; then
-    debug "Extracting names and namespaces from mesh config"
+    debug "Extracting names and namespaces from mesh config files"
     
-    namespaces=$($AWK_CMD '
-        BEGIN { 
-            RS="---"; 
-            FS="\n";
-            in_list = 0;
-        }
-        function clean_value(val) {
-            # Remove quotes and trim spaces
-            gsub(/^[ \t"'\'']+|[ \t"'\'']+$/, "", val)
-            gsub(/#.*$/, "", val)  # Remove comments
-            return val
-        }
-        {
-            # Skip empty documents
-            if (NF <= 1) next
+    TEMP_NS_FILE=$(mktemp)
+    # Check if yq exists
+    if ! command -v yq &> /dev/null; then
+        debug "yq could not be found"
+        echo "Error: yq is required but not installed"
+        exit 1
+    fi
+    debug "yq version: $(yq --version)"
+    
+    for config_file in "${valid_config_files[@]}"; do
+        if [[ -f "$config_file" ]]; then
+            debug "Processing file: $config_file"
             
-            # Reset variables for each document
-            name=""; namespace=""; skip_doc=0;
-            in_metadata=0;
-            has_api_version=0;
-            
-            # First pass - check for apiVersion and items
-            for (i=1; i<=NF; i++) {
-                if ($i ~ /^apiVersion:/) {
-                    has_api_version=1
-                }
-                if ($i ~ /^items:/) {
-                    in_list = 1
-                }
-            }
-            
-            # Second pass - process metadata
-            if (has_api_version || in_list) {
-                for (i=1; i<=NF; i++) {
-                    # Skip lines with templates
-                    if ($i ~ /{{.*}}/) {
-                        skip_doc = 1
-                        next
-                    }
-                    
-                    if ($i ~ /^[[:space:]]*metadata:/) {
-                        in_metadata = 1
-                        continue
-                    }
-                    
-                    if (in_metadata) {
-                        if ($i ~ /^[[:space:]]*name:/) {
-                            name = clean_value(gensub(/^[[:space:]]*name:[ \t]*/, "", 1, $i))
-                        }
-                        if ($i ~ /^[[:space:]]*namespace:/) {
-                            namespace = clean_value(gensub(/^[[:space:]]*namespace:[ \t]*/, "", 1, $i))
-                        }
-                        # Exit metadata section when we hit a non-indented line
-                        if ($i !~ /^[[:space:]]/ && $i ~ /:/) {
-                            in_metadata = 0
-                        }
-                    }
-                }
+            # Process both standalone resources and items in List resources
+            output=$(yq e '
+                # Process items in List resources
+                select(.kind == "List") | .items[] | 
+                select(.metadata.name != null and .metadata.namespace != null) |
+                .metadata.name + " " + .metadata.namespace
                 
-                # Print only if we have valid name and namespace and its not a template
-                if (name != "" && namespace != "" && !skip_doc) {
-                    print name " " namespace
-                }
-            }
+                # Process standalone resources
+                , select(.kind != "List" and .metadata.name != null and .metadata.namespace != null) |
+                .metadata.name + " " + .metadata.namespace
+            ' "$config_file" 2>&1) || true
             
-            # Reset list flag if not in a list
-            if (!in_list) {
-                in_list = 0
-            }
-        }
-    ' "$MESH_CONFIG" | sort | uniq)
+            if [[ -n "$output" ]]; then
+                echo "$output" >> "$TEMP_NS_FILE"
+            fi
+        else
+            debug "File not found or not readable: $config_file"
+        fi
+    done
+    
+    if [[ -f "$TEMP_NS_FILE" ]]; then
+        sort -u "$TEMP_NS_FILE" -o "$TEMP_NS_FILE"
+    else
+        debug "No temp file created - no valid entries found"
+    fi
+    
+    namespaces=$(cat "$TEMP_NS_FILE")
+    rm -f "$TEMP_NS_FILE"
 
     debug "Extracted names and namespaces:"
     debug "$namespaces"
@@ -196,9 +197,18 @@ fi
 
 # Process rows based on mode
 if [[ -z "$MESH_CONFIG" ]]; then
-    # If no mesh config (fully remote mode), copy all rows without filtering
-    debug "Remote mode: copying all rows without filtering"
-    awk 'NR > 3' "$TMP_OUTPUT" > "$FILTERED_OUTPUT"
+    # If no mesh config (fully remote mode), copy only content rows without borders and summary
+    debug "Remote mode: copying content rows without table formatting"
+    awk -F'│' '
+        # Skip header, borders, and summary rows
+        $0 !~ /^[├└─┌┐┘┍┑┕┙┝┥]+/ && 
+        $0 !~ /SUMMARY/ && 
+        NF > 3 {
+            # Clean and print content rows
+            gsub(/^[ \t]+|[ \t]+$/, "", $0)
+            if (NR > 3) print
+        }
+    ' "$TMP_OUTPUT" > "$FILTERED_OUTPUT"
 else
     # Iterate over the original rows in TMP_OUTPUT with filtering
     debug "Processing original rows with filtering"
@@ -281,6 +291,6 @@ debug "ERROR_COUNT=$ERROR_COUNT, WARNING_COUNT=$WARNING_COUNT"
 
 # Clean up temporary files
 debug "Cleaning up temporary files"
-rm -f "$FILTERED_OUTPUT" "$TMP_OUTPUT"
+rm -f "$FILTERED_OUTPUT" "$TMP_OUTPUT" "$TMP_ERROR"
 
 exit $EXIT_CODE
