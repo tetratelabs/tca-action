@@ -43,7 +43,7 @@ jobs:
 
       - name: Validate Istio Configs
         id: tca
-        uses: aegisworks/istio-action@main
+        uses: tetratelabs/tca-action@main
         with:
           tis-password: ${{ secrets.TIS_PASSWORD }}
           mesh-config: "./configs/gateway.yaml ./configs/virtualservice.yaml"  # Multiple files with space separator
