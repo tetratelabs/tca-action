@@ -37,14 +37,18 @@ if [ "${TCA_VERSION}" = "" ] ; then
   exit 1;
 fi
 
-# Install fetch from https://github.com/gruntwork-io/fetch/releases/download/v0.4.6/fetch_darwin_amd64
-curl -LJO https://github.com/gruntwork-io/fetch/releases/download/v0.4.6/fetch_${OSEXT}_${TCA_ARCH}
-chmod +x fetch_${OSEXT}_${TCA_ARCH}
-mv fetch_${OSEXT}_${TCA_ARCH} /usr/local/bin/fetch
-
-# download the TCA file from github relase page using fetch
+# download the TCA file directly from github release
 NAME="tca-auth_${TCA_VERSION}_${OSEXT}_${TCA_ARCH}.tar.gz"
-fetch --repo="https://github.com/tetratelabs/tca-action" -github-oauth-token="${GITHUB_ACCESS_TOKEN}" --tag="tca-auth-${TCA_VERSION}" --release-asset="${NAME}" ./
+DOWNLOAD_URL="https://github.com/tetratelabs/tca-action/releases/download/tca-auth-${TCA_VERSION}/${NAME}"
+
+echo "Downloading ${NAME} from ${DOWNLOAD_URL}"
+if curl -L -f -o "${NAME}" "${DOWNLOAD_URL}"; then
+    echo "Successfully downloaded ${NAME}"
+else
+    echo "Failed to download ${NAME} from ${DOWNLOAD_URL}"
+    echo "HTTP Status: $?"
+    exit 1
+fi
 
 # extract the tar file then remove it
 tar -xzf "${NAME}"

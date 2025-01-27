@@ -20,7 +20,6 @@ jobs:
         with:
           tis-password: ${{ secrets.TIS_PASS }}
           mesh-config: ./tca/test/manifest.yaml
-          github-token: ${{ secrets.GITHUB_TOKEN }}
           local-only: true
 
       - name: failure

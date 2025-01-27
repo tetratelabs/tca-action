@@ -52,7 +52,6 @@ jobs:
           #   ./configs/gateway.yaml
           #   ./configs/virtualservice.yaml
           kube-config: ${{ secrets.KUBECONFIG }}
-          github-token: ${{ secrets.TOKEN_FOR_GITHUB }}
 
       - name: Comment on PR
         uses: thollander/actions-comment-pull-request@v3
@@ -104,7 +103,7 @@ jobs:
 
 ### Cluster Mode
 
-For analyzing deployed configurations in your cluster:
+For periodically analyzing deployed configurations in your cluster:
 
 ```yaml
 name: Cluster Analysis
@@ -138,7 +137,7 @@ jobs:
 | `local-only` | Analyze configuration files locally without connecting to a Kubernetes cluster | No | `false` |
 | `mesh-config` | Path to the Istio service mesh configuration files. Multiple files can be specified using space or newline separator | No | `""` |
 | `kube-config` | Path to the Kubernetes config file for cluster analysis. Not used in local-only mode | No | `""` |
-| `version` | TCA version to use (e.g. 'v1.1.0'). Use 'latest' for most recent version | No | `latest` |
+| `version` | TCA version to use (e.g. '1.1.0'). Use 'latest' for most recent version | No | `v1.2.0` |
 
 ### Output Parameters
 
