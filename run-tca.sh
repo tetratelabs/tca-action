@@ -86,13 +86,20 @@ fi
 
 set +e
 # Run the TCA command
-TCA_COMMAND="tca analyze $ARGS || true"
+TCA_COMMAND="tca analyze $ARGS"
 debug "Running TCA command: $TCA_COMMAND"
 TMP_OUTPUT=$(mktemp)
 TMP_ERROR=$(mktemp)
 eval $TCA_COMMAND > "$TMP_OUTPUT" 2> "$TMP_ERROR"
 EXIT_CODE=$?  # Capture the exit code
 set -e
+
+# Return if $TMP_ERROR is not empty
+if grep -v "Error: issues found in Istio configuration" "$TMP_ERROR"; then
+    cat "$TMP_ERROR"
+    cat grep -v "Error: issues found in Istio configuration" "$TMP_ERROR" >> $OUTPUT_FILE
+    exit $EXIT_CODE
+fi
 
 # Check for specific error conditions
 if [[ "$LOCAL_ONLY" == "true" ]] && grep -q "istiod deployment not found" "$TMP_ERROR"; then
@@ -116,6 +123,8 @@ debug "TCA analysis completed"
 if [[ "${RUNNER_DEBUG:-}" == "1" ]]; then
     debug "Raw TCA output:"
     cat "$TMP_OUTPUT"
+    debug "Raw TCA error output:"
+    cat "$TMP_ERROR"
 fi
 
 # Check if there are no issues
@@ -128,7 +137,7 @@ if grep -q "No issues found in Istio configuration" "$TMP_OUTPUT"; then
         echo "✅ TCA analysis completed successfully with no issues"
         echo
         echo "No issues were found in the Istio configuration."
-    } > "$OUTPUT_FILE"
+    } >> "$OUTPUT_FILE"
     
     # Clean up and exit
     rm -f "$TMP_OUTPUT"
@@ -287,7 +296,7 @@ debug "ERROR_COUNT=$ERROR_COUNT, WARNING_COUNT=$WARNING_COUNT"
         NEW_ROW_NUM=$((NEW_ROW_NUM + 1))
     done < "$FILTERED_OUTPUT"
 
-} > "$OUTPUT_FILE"
+} >> "$OUTPUT_FILE"
 
 # Clean up temporary files
 debug "Cleaning up temporary files"
