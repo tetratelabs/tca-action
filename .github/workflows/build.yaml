@@ -32,3 +32,9 @@ jobs:
             ./tca/test/failed.yaml
           github-token: ${{ secrets.GITHUB_TOKEN }}
           local-only: true
+
+      - name: hybrid
+        uses: ./tca
+        with:
+          tis-password: ${{ secrets.TIS_PASS }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
