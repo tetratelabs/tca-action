@@ -7,7 +7,7 @@ on:
     branches:
       - "main"
 jobs:
-  verify:
+  success:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,7 +22,16 @@ jobs:
           mesh-config: ./tca/test/manifest.yaml
           local-only: true
 
+  failure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: tca
+          clean: true
+
       - name: failure
+        id: failure
         uses: ./tca
         continue-on-error: true # Continue even if the job fails
         with:
@@ -32,3 +41,33 @@ jobs:
             ./tca/test/failed.yaml
           github-token: ${{ secrets.GITHUB_TOKEN }}
           local-only: true
+
+      - name: Comment on PR
+        uses: thollander/actions-comment-pull-request@v3
+        with:
+          comment-tag: failure
+          mode: upsert
+          file-path: ${{ steps.failure.outputs.result-file }}
+
+  hybrid-failure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: tca
+          clean: true
+
+      - name: hybrid
+        id: hybrid
+        uses: ./tca
+        continue-on-error: true # Continue even if the job fails
+        with:
+          tis-password: ${{ secrets.TIS_PASS }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Comment on PR
+        uses: thollander/actions-comment-pull-request@v3
+        with:
+          comment-tag: hybrid-failure
+          mode: upsert
+          file-path: ${{ steps.hybrid.outputs.result-file }}
